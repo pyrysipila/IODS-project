@@ -11,5 +11,5 @@ output:
 
 I am excited about this project because I think I may be able to learn some R things.
 
-My GitHub repository is at <https://pyrysipila.github.io/IODS-project/>
+My GitHub repository is at <https://github.com/pyrysipila/IODS-project>
 
