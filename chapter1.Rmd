@@ -2,7 +2,7 @@
 title: "R Markdown, RStudio Exercise 1"
 author: "Pyry Sipilä"
 output:
-  pdf_document:
+  html_document:
     toc: TRUE
 ---
 
