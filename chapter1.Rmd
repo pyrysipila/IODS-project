@@ -1,4 +1,15 @@
+---
+title: "R Markdown, RStudio Exercise 1"
+author: "Pyry Sipilä"
+output:
+  pdf_document:
+    toc: TRUE
+---
+
 
 # About the project
 
-*Write a short description about the course and add a link to your github repository here. This is an R markdown (.Rmd) file so you can use R markdown syntax. See the 'Useful links' page in the mooc area (chapter 1) for instructions.*
+I am excited about this project because I think I may be able to learn some R things.
+
+My GitHub repository is at <https://pyrysipila.github.io/IODS-project/>
+
