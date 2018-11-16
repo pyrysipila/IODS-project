@@ -1,0 +1,177 @@
+---
+title: "R Markdown, RStudio Exercise 3"
+author: "Pyry Sipilä"
+date: "16 November 2018"
+output: html_document
+---
+
+# Chapter 3: Logistic regression
+
+###Import the data from my computer
+```{r}
+alc <- read.csv("//atkk/home/p/pyrysipi/Documents/Tutkimus/Kurssit/Introduction to Open Data Science 2018/Data/alc.csv")
+colnames(alc)
+library(dplyr)
+glimpse(alc)
+```
+###The data
+
+The data were collected from secondary students in Portugal. They contain information on alcohol use and performance in mathematics and portuguese, and some other information as well.
+
+More information on the data can be found here: <https://archive.ics.uci.edu/ml/datasets/Student+Performance>
+
+I will examine the relationships of sex, Medu (Mother's education), Fedu (Father's education) and famsize (family size) with high alcohol use.
+
+My hypotheses are that:
+1) men have a higher probability of high alcohol use than women,
+2) higher maternal education is associated with lower probability of high alcohol use,
+3) higher paternal education is associated with lower probability of high alcohol use and
+4) bigger family size is associated withlower probability of high alcohol use and
+
+###Cross tabulations
+
+```{r}
+table(sex = alc$sex, high_use = alc$high_use) %>% addmargins()
+
+table(Medu = alc$Medu, high_use = alc$high_use) %>% addmargins()
+
+table(Fedu = alc$Fedu, high_use = alc$high_use) %>% addmargins()
+
+table(Family_size = alc$famsize, high_use = alc$high_use) %>% addmargins()
+
+```
+
+###Plots
+
+```{r}
+library(ggplot2)
+g_sex <- ggplot(alc, aes(high_use, ..count..))
+g_sex + geom_bar(aes(fill=sex), position = "dodge")
+g_Medu <- ggplot(alc, aes(x = high_use, y = Medu))
+g_Medu + geom_boxplot()
+g_Fedu <- ggplot(alc, aes(x = high_use, y = Fedu))
+g_Fedu + geom_boxplot()
+g_famsize <- ggplot(alc, aes(x = high_use, ..count..))
+g_famsize + geom_bar(aes(fill=famsize), position = "dodge")
+
+```
+
+Men seem to be high users of alcohol more often than women and high use seems to be more common in small families (with 3 or less than 3 members) than in big families (with more than 3 members). Thus, my hypotheses 1 and 4 seem to be correct.
+
+In copntrast, maternal education does not seem to be associated with high alcohol use and paternal education seems to be associated with higher probability of high alcohol use. Thus, my hypotheses 2 and 3 seem to be false.
+
+###Logistic regression
+```{r}
+m <- glm(high_use ~ sex + Medu + Fedu + famsize, data=alc, family = "binomial")
+m
+```
+
+Male sex, higher father's education (per one unit increase in education) and small familysize (3 or less than 3 members) have positive coefficients indicating a positive association with high alcohol use.
+
+Higher mother's education (per one unit increase in education) has a negative coefficient indicating a negative association with high alcohol use.
+```{r}
+OR <- coef(m) %>% exp
+CI <- confint(m) %>% exp
+cbind(OR, CI)
+```
+
+Men have 2.4 times higher odds than women to be high alcohol users. The association is statistically significant (at alpha level 0.05), because the 95% confidence interval does not include 1. My hypothesis 1 seems to be correct.
+
+Each increase of one unit in mother's educations makes the odds to be high alcohol users 0.93 times lower. Nevertheless, the association is not statistically significant (at alpha level 0.05), because the 95% confidence interval includes 1. My hypothesis 2 cannot be confirmed.
+
+Each increase of one unit in father's educations makes the odds to be high alcohol user 1.08 times higher. Nevertheless, the association is not statistically significant (at alpha level 0.05), because the 95% confidence interval includes 1. My hypothesis 3 cannot be confirmed.
+
+Those from small families have 1.3 times higher odds than those from big families to be high alcohol users. Nevertheless, the association is not statistically significant (at alpha level 0.05), because the 95% confidence interval includes 1. My hypothesis 4 cannot be confirmed.
+
+###Predictive power of the model
+
+Only sex will be included in the predictive model because it was the only variable with a statistically significant association with high alcohol use.
+```{r}
+# fit the model
+m <- glm(high_use ~ sex, data = alc, family = "binomial")
+
+# predict() the probability of high_use
+probabilities <- predict(m, type = "response")
+
+# add the predicted probabilities to 'alc'
+alc <- mutate(alc, probability = probabilities)
+
+# use the probabilities to make a prediction of high_use
+alc <- mutate(alc, prediction = probability>0.5)
+
+# see the last ten original classes, predicted probabilities, and class predictions
+select(alc, sex, high_use, probability, prediction) %>% tail(10)
+
+# tabulate the target variable versus the predictions
+table(high_use = alc$high_use, prediction = alc$prediction)
+table(high_use = alc$high_use, prediction = alc$prediction) %>% prop.table()
+
+#plot the predictions and actual values
+
+# initialize a plot of 'high_use' versus 'probability' in 'alc'
+g <- ggplot(alc, aes(x = probability, y = high_use, col = prediction))
+
+# define the geom as points and draw the plot
+g + geom_point()
+
+# define a loss function (mean prediction error)
+loss_func <- function(class, prob) {
+  n_wrong <- abs(class - prob) > 0.5
+  mean(n_wrong)
+}
+
+# call loss_func to compute the average number of wrong predictions in the (training) data
+loss_func(class = alc$high_use, prob = alc$probability)
+```
+
+The model predicts everyone to be not a high alcohol user. This is wrong in 30% of the cases. The model performs better than flipping a coin: a strategy that would be wrong in 50% of the cases.
+
+###Bonus:
+10-fold cross validation
+```{r}
+library(boot)
+cv <- cv.glm(data = alc, cost = loss_func, glmfit = m, K = 10)
+# average number of wrong predictions in the cross validation
+cv$delta[1]
+```
+
+The model has a prediciton error of 0.30. I'll try to make a better one by including the same variables as in the DataCamp excercise and a couple of extra variables:
+```{r}
+# fit the model
+m <- glm(high_use ~ school + sex + age + address + famsize + failures + absences, data = alc, family = "binomial")
+m
+
+# predict() the probability of high_use
+probabilities <- predict(m, type = "response")
+
+# add the predicted probabilities to 'alc'
+alc <- mutate(alc, probability = probabilities)
+summary(alc$probability)
+
+# use the probabilities to make a prediction of high_use
+alc <- mutate(alc, prediction = probability>0.5)
+
+# tabulate the target variable versus the predictions
+table(high_use = alc$high_use, prediction = alc$prediction)
+table(high_use = alc$high_use, prediction = alc$prediction) %>% prop.table()
+
+#plot the predictions and actual values
+
+# initialize a plot of 'high_use' versus 'probability' in 'alc'
+g <- ggplot(alc, aes(x = probability, y = high_use, col = prediction))
+
+# define the geom as points and draw the plot
+g + geom_point()
+
+# call loss_func to compute the average number of wrong predictions in the (training) data
+loss_func(class = alc$high_use, prob = alc$probability)
+
+#perform 10-fold croos-validation
+cv <- cv.glm(data = alc, cost = loss_func, glmfit = m, K = 10)
+# average number of wrong predictions in the cross validation
+cv$delta[1]
+
+```
+
+Now the prediciton error is 0.27. It seems to be that I cannot beat DataCamp.
+
