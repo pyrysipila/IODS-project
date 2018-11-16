@@ -1,8 +1,10 @@
 ---
 title: "R Markdown, RStudio Exercise 3"
-author: "Pyry Sipil‰"
+author: "Pyry Sipil√§"
 date: "16 November 2018"
-output: html_document
+output:
+  html_document:
+    toc: TRUE
 ---
 
 # Chapter 3: Logistic regression
