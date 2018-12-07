@@ -1,0 +1,235 @@
+---
+title: "RStudio Exercise 6"
+author: "Pyry Sipilä"
+date: "2 December 2018"
+output: 
+  html_document:
+    toc: TRUE
+---
+
+#Chapter 6: Analysis of longitudinal data
+
+```{r, include=FALSE}
+#Prepare the data
+#1
+# Read the BPRS data
+BPRS <- read.table("https://raw.githubusercontent.com/KimmoVehkalahti/MABS/master/Examples/data/BPRS.txt", sep  =" ", header = T)
+
+# Read the RATS data
+RATS <- read.table("https://raw.githubusercontent.com/KimmoVehkalahti/MABS/master/Examples/data/rats.txt", header = TRUE, sep = '\t')
+
+#2
+# Access the packages dplyr and tidyr
+library(dplyr)
+library(tidyr)
+
+# Factor treatment & subject
+BPRS$treatment <- factor(BPRS$treatment)
+BPRS$subject <- factor(BPRS$subject)
+
+RATS$ID <- factor(RATS$ID)
+RATS$Group <- factor(RATS$Group)
+
+#3
+BPRSL <-  BPRS %>% gather(key = weeks, value = bprs, -treatment, -subject)
+
+RATSL <- RATS %>%
+  gather(key = WD, value = Weight, -ID, -Group)
+
+#4
+# Extract the week number
+BPRSL <-  BPRSL %>% mutate(week = as.integer(substr(weeks,5,5)))
+
+#Ad a time variable to RATS
+RATSL <- RATS %>%
+  gather(key = WD, value = Weight, -ID, -Group) %>%
+  mutate(Time = as.integer(substr(WD,3,4))) 
+
+```
+
+## RATSL
+
+#### Plot the RATSL data
+```{r}
+# Plot the RATSL data'
+library(ggplot2)
+ggplot(RATSL, aes(x = Time, y = Weight, group = ID)) +
+  geom_line(aes(linetype = Group)) +
+scale_x_continuous(name = "Time (days)", breaks = seq(0, 60, 10)) +
+theme(legend.position = "top")
+```
+Rats in group 1 are lighter all the time.
+
+###Multiple linear regression
+```{r}
+
+# create a regression model RATS_reg
+RATS_reg <- lm(data = RATSL, Weight ~ Time + Group)
+
+# print out a summary of the model
+summary(RATS_reg)
+```
+Groups 2 and 3 are heavier than group 1. The coefficient of Time is statistically highly significant
+
+###The random intercept model
+```{r}
+library(lme4)
+RATS_ref <- lmer(Weight ~ Time + Group + (1 | ID), data = RATSL, REML = FALSE)
+```
+There is high variability by rat ID.
+
+###The random intercept and random slope model
+```{r}
+# create a random intercept and random slope model
+RATS_ref1 <- lmer(Weight ~ Time + Group + (Time | ID), data = RATSL, REML = FALSE)
+
+# print a summary of the model
+summary(RATS_ref1)
+
+# perform an ANOVA test on the two models
+anova(RATS_ref1, RATS_ref)
+```
+The random intercept and slope model fits much better than the random intercept model.
+
+###Random Intercept and Random Slope Model with interaction
+```{r}
+# create a random intercept and random slope model with the interaction
+RATS_ref2 <- lmer(Weight ~ Time + Group + Time*Group + (Time | ID), data = RATSL, REML = FALSE)
+
+# print a summary of the model
+summary(RATS_ref2)
+
+# perform an ANOVA test on the two models
+anova(RATS_ref2, RATS_ref1)
+
+# draw the plot of RATSL with the observed Weight values
+ggplot(RATSL, aes(x = Time, y = Weight, group = ID)) +
+  geom_line(aes(linetype = Group)) +
+  scale_x_continuous(name = "Time (days)", breaks = seq(0, 60, 20)) +
+  scale_y_continuous(name = "Observed weight (grams)") +
+  theme(legend.position = "top")
+
+# Create a vector of the fitted values
+Fitted <- fitted(RATS_ref2)
+
+# Create a new column fitted to RATSL
+RATSL <- mutate(RATSL,fitted=Fitted)
+
+# draw the plot of RATSL with the Fitted values of weight
+ggplot(RATSL, aes(x = Time, y = fitted, group = ID)) +
+  geom_line(aes(linetype = Group)) +
+  scale_x_continuous(name = "Time (days)", breaks = seq(0, 60, 20)) +
+  scale_y_continuous(name = "Fitted weight (grams)") +
+  theme(legend.position = "top")
+```
+The random intercept and slope model with group x time interaction fits better than the random intercept and slope model.
+
+## BPRS
+
+### Draw the plot
+
+```{r}
+ggplot(BPRSL, aes(x = week, y = bprs, linetype = subject)) +
+  geom_line() +
+  scale_linetype_manual(values = rep(1:10, times=4)) +
+  facet_grid(. ~ treatment, labeller = label_both) +
+  theme(legend.position = "none") + 
+  scale_y_continuous(limits = c(min(BPRSL$bprs), max(BPRSL$bprs)))
+```
+The symptom score trajectories in groups with treatment 1 and 2 look otherwise roughly similar, but there seems to be one individual with consistently exceptionally high scores and two other individuals with an extraordinary high scores at the last two measurements.
+
+###Standardise
+```{r}
+# Standardise the variable bprs
+BPRSL <- BPRSL %>%
+  group_by(week) %>%
+  mutate(stdbprs = scale(bprs)) %>%
+  ungroup()
+
+# Glimpse the data
+glimpse(BPRSL)
+
+# Plot again with the standardised bprs
+ggplot(BPRSL, aes(x = week, y = stdbprs, linetype = subject)) +
+  geom_line() +
+  scale_linetype_manual(values = rep(1:10, times=4)) +
+  facet_grid(. ~ treatment, labeller = label_both) +
+  scale_y_continuous(name = "standardized bprs")
+
+```
+After standardization, the trajectories show similar patterns than before standardization.
+
+###Summary graphs
+```{r}
+# Number of weeks, baseline (week 0) included
+n <- BPRSL$week %>% unique() %>% length()
+
+# Summary data with mean and standard error of bprs by treatment and week 
+BPRSS <- BPRSL %>%
+  group_by(treatment, week) %>%
+  summarise( mean = mean(bprs), se = sd(bprs)/(n)^0.5 ) %>%
+  ungroup()
+
+
+
+# Plot the mean profiles
+ggplot(BPRSS, aes(x = week, y = mean, linetype = treatment, shape = treatment)) +
+  geom_line() +
+  scale_linetype_manual(values = c(1,2)) +
+  geom_point(size=3) +
+  scale_shape_manual(values = c(1,2)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se, linetype="1"), width=0.3) +
+  theme(legend.position = c(0.8,0.8)) +
+  scale_y_continuous(name = "mean(bprs) +/- se(bprs)")
+
+```
+There is a lot of overlap in the confidence intervals of the mean symptom scores of treatment 1 and 2 at each week. This implies that the difference of the treatments in respect of the symptom scores is not statistically significant. In other words, there probably is little difference in the effects of the treatments.
+
+#### Find the outlier
+
+```{r}
+# Create a summary data by treatment and subject with mean as the summary variable (ignoring baseline week 0).
+BPRSL8S <- BPRSL %>%
+  filter(week > 0) %>%
+  group_by(treatment, subject) %>%
+  summarise( mean=mean(bprs) ) %>%
+  ungroup()
+
+# Glimpse the data
+glimpse(BPRSL8S)
+
+# Draw a boxplot of the mean versus treatment
+ggplot(BPRSL8S, aes(x = treatment, y = mean)) +
+  geom_boxplot() +
+  stat_summary(fun.y = "mean", geom = "point", shape=23, size=4, fill = "white") +
+  scale_y_continuous(name = "mean(bprs), weeks 1-8")
+
+# Create a new data by filtering the outlier and adjust the ggplot code the draw the plot again with the new data
+BPRSL8S1 <- filter(BPRSL8S,mean<70)
+
+glimpse(BPRSL8S1)
+
+# Draw a boxplot of the mean versus treatment
+ggplot(BPRSL8S1, aes(x = treatment, y = mean)) +
+  geom_boxplot() +
+  stat_summary(fun.y = "mean", geom = "point", shape=23, size=4, fill = "white") +
+  scale_y_continuous(name = "mean(bprs), weeks 1-8")
+```
+With all the data, mean symptom score is lower in treatment group 1, but after removing the one outlier in group 2, the mean symptom score is lower in treatment group 2. Nevertheless, given the variation in the data, these differences in the mean symptom scores between the groups are very small and likely not statistically significant.
+
+#### T-test and ANOVA
+```{r}
+# Perform a two-sample t-test
+t.test(mean ~ treatment, data = BPRSL8S1, var.equal = TRUE)
+
+# Add the baseline from the original data as a new variable to the summary data
+BPRSL8S2 <- BPRSL8S %>%
+  mutate(baseline = BPRS$week0)
+
+# Fit the linear model with the mean as the response 
+fit <- lm(mean ~ treatment + baseline, data = BPRSL8S2)
+
+# Compute the analysis of variance table for the fitted model with anova()
+anova(fit)
+```
+The t-test confirms my suspicion that the difference in mean symptom scores between the treatment groups is not statistically significant. The linear model adjusts for baseline symptom score. Anova shows that the effect of baseline symptom score is statistically highly significant, but the difference between the treatment groups remains statistically non-significant even after adjustment for the baseline symptom score.
