@@ -1,6 +1,6 @@
 ---
 title: "RStudio Exercise 6"
-author: "Pyry Sipil‰"
+author: "Pyry Sipil√§"
 date: "2 December 2018"
 output: 
   html_document:
